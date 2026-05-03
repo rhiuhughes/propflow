@@ -120,4 +120,4 @@ export default async function Dashboard() {
       </div>
     </main>
   )
-}EOF
+}

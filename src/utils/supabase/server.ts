@@ -1,10 +1,3 @@
-create policy "read_all" on properties for select using (true);
-create policy "read_all" on valuations for select using (true);
-create policy "read_all" on enquiries for select using (true);
-create policy "read_all" on offers for select using (true);
-create policy "read_all" on renovations for select using (true);
-nano src/utils/supabase/server.tsnano src/utils/supabase/server.ts
-
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 
