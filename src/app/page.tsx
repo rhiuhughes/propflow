@@ -75,7 +75,7 @@ export default async function Dashboard() {
                 {properties && properties.length > 0 ? properties.map((p) => {
                   const val = Array.isArray(p.valuations) ? p.valuations[0] : null
                   return (
-                    <tr key={p.id} className="hover:bg-gray-50 transition-colors">
+                    <tr key={p.id} className="hover:bg-gray-50 transition-colors cursor-pointer" onClick={() => window.location.href = `/property/${p.id}`}>
                       <td className="px-6 py-4">
                         <div className="font-medium text-gray-900">{p.address}</div>
                         <div className="text-xs text-gray-400">{p.suburb}</div>
