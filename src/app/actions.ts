@@ -5,7 +5,7 @@ import { redirect } from 'next/navigation'
 export async function addProperty(formData: FormData) {
   const supabase = await createClient()
 
-  await supabase.from('properties').insert({
+  const { error } = await supabase.from('properties').insert({
     address: formData.get('address') as string,
     suburb: formData.get('suburb') as string,
     city: formData.get('city') as string,
@@ -23,6 +23,8 @@ export async function addProperty(formData: FormData) {
     pipeline_stage: 1,
     status: 'active',
   })
+
+  if (error) throw new Error(error.message)
 
   redirect('/')
 }
