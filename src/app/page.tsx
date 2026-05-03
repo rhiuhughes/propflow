@@ -1,5 +1,6 @@
 
 import { createClient } from '@/utils/supabase/server'
+import Link from 'next/link'
 
 const STAGES: Record<number, string> = {
   1: 'Sourced', 2: 'Qualified', 3: 'Valued', 4: 'Yield Assessed',
@@ -34,9 +35,14 @@ export default async function Dashboard() {
     <main className="min-h-screen bg-gray-50 p-8">
       <div className="max-w-7xl mx-auto space-y-8">
 
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">PropFlow</h1>
-          <p className="text-gray-400 text-sm mt-1">Property Investment Pipeline</p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">PropFlow</h1>
+            <p className="text-gray-400 text-sm mt-1">Property Investment Pipeline</p>
+          </div>
+          <Link href="/add" className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors">
+            + Add Property
+          </Link>
         </div>
 
         <div className="grid grid-cols-3 gap-4">
