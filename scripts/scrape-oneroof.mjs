@@ -211,8 +211,9 @@ async function scrapeCombo(browser, region, beds) {
       const listing = buildListing(raw)
       if (!listing) continue
 
-      // Skip auction/tender/contact agent listings — no price displayed
+      // Skip no-price listings (auction/tender/contact agent) and out-of-range prices
       if (!listing.asking_price) continue
+      if (listing.asking_price < 100000 || listing.asking_price > 500000) continue
 
       // Skip if already in DB
       const { data: existing } = await supabase
@@ -244,7 +245,7 @@ async function scrapeCombo(browser, region, beds) {
 async function main() {
   console.log(`\n🏠 OneRoof scraper starting — ${new Date().toISOString()}`)
   console.log(`Regions: ${NORTH_ISLAND_REGIONS.map(r => r.name).join(', ')}`)
-  console.log(`Bedrooms: ${BEDROOMS.join(', ')} | Max pages: ${MAX_PAGES} | Filter: priced listings only (excludes auction/tender/contact agent)\n`)
+  console.log(`Bedrooms: ${BEDROOMS.join(', ')} | Max pages: ${MAX_PAGES} | Price: $100k–$500k\n`)
 
   const browser = await chromium.launch({
     headless: true,
