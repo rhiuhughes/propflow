@@ -1,0 +1,195 @@
+/**
+ * Bulk AI scorer — runs nightly after the scraper.
+ * Scores all unscored properties using claude-haiku-4-5 (fast, cheap).
+ * When CMA data exists, passes real REINZ figures instead of estimating.
+ *
+ * Cost estimate: ~$0.002 per property → 100 properties ≈ $0.20/night
+ */
+
+import Anthropic from '@anthropic-ai/sdk'
+import { createClient } from '@supabase/supabase-js'
+
+// ─── Config ───────────────────────────────────────────────────────────────────
+
+const SUPABASE_URL  = process.env.NEXT_PUBLIC_SUPABASE_URL
+const SUPABASE_KEY  = process.env.SUPABASE_SERVICE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+const ANTHROPIC_KEY = process.env.ANTHROPIC_API_KEY
+
+if (!SUPABASE_URL || !SUPABASE_KEY || !ANTHROPIC_KEY) {
+  console.error('Missing env vars: NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_KEY, ANTHROPIC_API_KEY')
+  process.exit(1)
+}
+
+const supabase  = createClient(SUPABASE_URL, SUPABASE_KEY)
+const anthropic = new Anthropic({ apiKey: ANTHROPIC_KEY })
+
+const MAX_PER_RUN  = 100   // Properties to score per nightly run
+const CALL_DELAY   = 800   // ms between API calls (stay within rate limits)
+
+// ─── Prompt builder ───────────────────────────────────────────────────────────
+
+function buildPrompt(p, cma) {
+  const hasCMA = cma?.fair_value || cma?.post_reno_value
+
+  return `Score this NZ investment property for a buy-renovate-refinance-hold strategy.
+
+Property:
+- Address: ${p.address}, ${p.suburb ?? ''}, ${p.city ?? 'NZ'}
+- Asking price: ${p.asking_price ? `$${Number(p.asking_price).toLocaleString()}` : 'not stated'}
+- Bedrooms: ${p.bedrooms ?? 'unknown'}, Bathrooms: ${p.bathrooms ?? 'unknown'}
+- Floor area: ${p.floor_area ? `${p.floor_area}m²` : 'unknown'}, Land area: ${p.land_area ? `${p.land_area}m²` : 'unknown'}
+- Built: ${p.construction_year ?? 'unknown'}
+${hasCMA ? `
+CMA from REINZ comparable sales (real data — use exactly, do not estimate):
+- Fair market value: ${cma.fair_value ? `$${Number(cma.fair_value).toLocaleString()}` : 'n/a'}
+- Post-renovation value: ${cma.post_reno_value ? `$${Number(cma.post_reno_value).toLocaleString()}` : 'n/a'}
+` : `
+No CMA available — estimate values from suburb knowledge.
+`}
+NZ investment assumptions:
+- Mortgage: 6.5% p.a. on 80% LVR · PM fee: 8% · Insurance: $1,500/yr · Rates: $3,000/yr · Maintenance: 1%/yr
+- Reno budget: $20k–$35k
+
+Return ONLY valid JSON (no markdown):
+{
+  "weekly_rent_estimate": <number>,
+  "gross_yield": <number, %>,
+  "net_yield": <number, %>,
+  "weekly_cashflow": <number, negative if negatively geared>,
+  "fair_value": <number${hasCMA && cma.fair_value ? `, must be ${Number(cma.fair_value)}` : ''}>,
+  "post_reno_value": <number${hasCMA && cma.post_reno_value ? `, must be ${Number(cma.post_reno_value)}` : ''}>,
+  "purchase_price_target": <number>,
+  "vacancy_risk": <"low"|"medium"|"high">,
+  "recommendation": <"go"|"conditional"|"no-go">,
+  "recommendation_reason": <string, 1-2 sentences>,
+  "ai_score": <number, 1-10>
+}`
+}
+
+// ─── Parse Claude response ────────────────────────────────────────────────────
+
+function parseResponse(text) {
+  try {
+    return JSON.parse(text.trim())
+  } catch {
+    const match = text.match(/\{[\s\S]*\}/)
+    if (!match) return null
+    try { return JSON.parse(match[0]) } catch { return null }
+  }
+}
+
+// ─── Save results to Supabase ─────────────────────────────────────────────────
+
+async function saveResults(propertyId, analysis) {
+  // Update ai_score + advance pipeline stage
+  await supabase
+    .from('properties')
+    .update({
+      ai_score: analysis.ai_score,
+      pipeline_stage: 2, // Qualified
+    })
+    .eq('id', propertyId)
+
+  // Upsert valuation row
+  const valuationData = {
+    property_id:          propertyId,
+    weekly_rent_estimate: analysis.weekly_rent_estimate,
+    gross_yield:          analysis.gross_yield,
+    net_yield:            analysis.net_yield,
+    weekly_cashflow:      analysis.weekly_cashflow,
+    fair_value:           analysis.fair_value,
+    post_reno_value:      analysis.post_reno_value,
+    purchase_price_target: analysis.purchase_price_target,
+    vacancy_risk:         analysis.vacancy_risk,
+    recommendation:       analysis.recommendation,
+    recommendation_reason: analysis.recommendation_reason,
+  }
+
+  const { data: existing } = await supabase
+    .from('valuations')
+    .select('id')
+    .eq('property_id', propertyId)
+    .maybeSingle()
+
+  if (existing) {
+    // Only overwrite yield/cashflow/rent — preserve real CMA fair_value/post_reno_value
+    const { fair_value, post_reno_value, ...yieldData } = valuationData
+    await supabase.from('valuations').update(yieldData).eq('id', existing.id)
+  } else {
+    await supabase.from('valuations').insert(valuationData)
+  }
+}
+
+// ─── Main ─────────────────────────────────────────────────────────────────────
+
+async function main() {
+  console.log(`\n⚡ Bulk scorer starting — ${new Date().toISOString()}`)
+
+  // Fetch unscored properties, newest first
+  const { data: properties, error } = await supabase
+    .from('properties')
+    .select('*')
+    .is('ai_score', null)
+    .eq('status', 'active')
+    .order('created_at', { ascending: false })
+    .limit(MAX_PER_RUN)
+
+  if (error) { console.error('Fetch error:', error.message); process.exit(1) }
+  if (!properties?.length) { console.log('No unscored properties — nothing to do.'); return }
+
+  console.log(`Scoring ${properties.length} properties...\n`)
+
+  // Fetch CMA data for all these properties in one query
+  const ids = properties.map(p => p.id)
+  const { data: valuations } = await supabase
+    .from('valuations')
+    .select('property_id, fair_value, post_reno_value')
+    .in('property_id', ids)
+
+  const cmaByPropertyId = Object.fromEntries(
+    (valuations ?? []).map(v => [v.property_id, v])
+  )
+
+  let scored = 0, failed = 0
+
+  for (const property of properties) {
+    const cma = cmaByPropertyId[property.id] ?? null
+    const hasCMA = cma?.fair_value || cma?.post_reno_value
+
+    process.stdout.write(`  ${property.address}, ${property.suburb ?? ''}${hasCMA ? ' [CMA]' : ''} ... `)
+
+    try {
+      const response = await anthropic.messages.create({
+        model: 'claude-haiku-4-5',
+        max_tokens: 512,
+        system: 'You are a precise NZ property investment analyst. Respond with valid JSON only — no markdown, no explanation.',
+        messages: [{ role: 'user', content: buildPrompt(property, cma) }],
+      })
+
+      const text = response.content.find(b => b.type === 'text')?.text ?? ''
+      const analysis = parseResponse(text)
+
+      if (!analysis || typeof analysis.ai_score !== 'number') {
+        console.log('parse failed')
+        failed++
+        continue
+      }
+
+      await saveResults(property.id, analysis)
+      console.log(`${analysis.ai_score}/10 · ${analysis.recommendation}`)
+      scored++
+    } catch (e) {
+      console.log(`error: ${e.message}`)
+      failed++
+    }
+
+    await new Promise(r => setTimeout(r, CALL_DELAY))
+  }
+
+  console.log(`\n✓ Done — ${scored} scored, ${failed} failed`)
+}
+
+main().catch(e => {
+  console.error('Fatal:', e)
+  process.exit(1)
+})

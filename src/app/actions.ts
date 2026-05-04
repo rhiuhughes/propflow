@@ -35,51 +35,53 @@ export async function runAIAnalysis(formData: FormData) {
   const propertyId = formData.get('propertyId') as string
   const supabase = await createClient()
 
-  const { data: p, error: fetchError } = await supabase
-    .from('properties')
-    .select('*')
-    .eq('id', propertyId)
-    .single()
+  const [{ data: p, error: fetchError }, { data: cma }] = await Promise.all([
+    supabase.from('properties').select('*').eq('id', propertyId).single(),
+    supabase.from('valuations').select('fair_value, post_reno_value').eq('property_id', propertyId).maybeSingle(),
+  ])
 
   if (fetchError || !p) throw new Error('Property not found')
 
+  const hasCMA = cma?.fair_value || cma?.post_reno_value
+
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
-  const prompt = `You are an expert NZ property investment analyst. Analyse this property and return a JSON object.
+  const prompt = `Analyse this NZ investment property and return a JSON object.
 
 Property details:
 - Address: ${p.address}, ${p.suburb ?? 'unknown suburb'}, ${p.city ?? 'NZ'}
-- Asking price: ${p.asking_price ? `$${p.asking_price}` : 'not provided'}
+- Asking price: ${p.asking_price ? `$${Number(p.asking_price).toLocaleString()}` : 'not provided'}
 - Bedrooms: ${p.bedrooms ?? 'unknown'}, Bathrooms: ${p.bathrooms ?? 'unknown'}
 - Floor area: ${p.floor_area ? `${p.floor_area}m²` : 'unknown'}, Land area: ${p.land_area ? `${p.land_area}m²` : 'unknown'}
 - Construction year: ${p.construction_year ?? 'unknown'}
-- Listing source: ${p.listing_source ?? 'unknown'}
+${hasCMA ? `
+CMA data from REINZ comparable sales (real data — use these exact figures, do not estimate):
+- Fair market value: ${cma?.fair_value ? `$${Number(cma.fair_value).toLocaleString()}` : 'not available'}
+- Post-renovation value: ${cma?.post_reno_value ? `$${Number(cma.post_reno_value).toLocaleString()}` : 'not available'}
+` : `
+No CMA data available — estimate fair_value and post_reno_value from your knowledge of this suburb.
+`}
+NZ investment assumptions:
+- Strategy: buy-renovate-refinance-hold
+- Renovation budget: $20k–$35k
+- Mortgage: 6.5% p.a. on 80% LVR
+- Property management: 8% of gross rent
+- Insurance: $1,500/yr · Rates: $3,000/yr · Maintenance: 1% of purchase price/yr
 
-NZ investment context:
-- Target: buy-renovate-refinance-hold strategy
-- Typical renovation budget: $20k–$35k
-- Mortgage rate assumption: 6.5% p.a. on 80% LVR
-- Property management fee: 8% of gross rent
-- Insurance: ~$1,500/yr
-- Rates: ~$3,000/yr
-- Maintenance: 1% of purchase price/yr
-
-Return ONLY a valid JSON object with these exact fields:
+Return ONLY valid JSON:
 {
-  "weekly_rent_estimate": <number, estimated weekly rent post-reno in NZD>,
-  "gross_yield": <number, percentage e.g. 6.2>,
-  "net_yield": <number, percentage after all costs>,
-  "weekly_cashflow": <number, weekly cashflow after all costs including mortgage, negative if negatively geared>,
-  "fair_value": <number, estimated fair market value in NZD based on suburb>,
-  "post_reno_value": <number, estimated value after typical renovation in NZD>,
-  "purchase_price_target": <number, recommended max purchase price to hit yield targets in NZD>,
-  "vacancy_risk": <"low" | "medium" | "high">,
-  "recommendation": <"go" | "conditional" | "no-go">,
-  "recommendation_reason": <string, 2-3 sentence explanation of the recommendation>,
-  "ai_score": <number, 1-10 overall investment score>
-}
-
-Base your analysis on NZ property market knowledge for the suburb. If asking price is not provided, use fair value as the basis for yield calculations.`
+  "weekly_rent_estimate": <number, estimated post-reno weekly rent NZD>,
+  "gross_yield": <number, % e.g. 6.2>,
+  "net_yield": <number, % after all costs>,
+  "weekly_cashflow": <number, after all costs incl. mortgage — negative if negatively geared>,
+  "fair_value": <number${hasCMA && cma?.fair_value ? ` — must be ${Number(cma.fair_value).toLocaleString()} (from CMA)` : ', estimated NZD'}>,
+  "post_reno_value": <number${hasCMA && cma?.post_reno_value ? ` — must be ${Number(cma.post_reno_value).toLocaleString()} (from CMA)` : ', estimated NZD'}>,
+  "purchase_price_target": <number, max price to hit yield targets NZD>,
+  "vacancy_risk": <"low"|"medium"|"high">,
+  "recommendation": <"go"|"conditional"|"no-go">,
+  "recommendation_reason": <string, 2-3 sentences>,
+  "ai_score": <number, 1-10>
+}`
 
   const response = await client.messages.create({
     model: 'claude-opus-4-7',
