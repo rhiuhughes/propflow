@@ -143,6 +143,14 @@ export default async function PropertyPage({ params }: { params: Promise<{ id: s
           </div>
         )}
 
+        {/* CMA button */}
+        <Link
+          href={`/property/${p.id}/cma`}
+          className="block w-full text-center bg-white hover:bg-gray-50 border border-gray-200 text-gray-700 font-medium py-3 rounded-xl text-sm transition-colors"
+        >
+          {val?.fair_value ? '✎ Edit CMA (REINZ comps)' : '+ Run CMA (upload REINZ comps)'}
+        </Link>
+
         {/* Run analysis button */}
         <form action={runAIAnalysis}>
           <input type="hidden" name="propertyId" value={p.id} />
