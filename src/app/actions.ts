@@ -108,24 +108,37 @@ Base your analysis on NZ property market knowledge for the suburb. If asking pri
     analysis = JSON.parse(match[0])
   }
 
-  // Upsert into valuations table
-  const { error: upsertError } = await supabase
+  // Check if a valuation already exists for this property
+  const { data: existing } = await supabase
     .from('valuations')
-    .upsert({
-      property_id: propertyId,
-      weekly_rent_estimate: analysis.weekly_rent_estimate,
-      gross_yield: analysis.gross_yield,
-      net_yield: analysis.net_yield,
-      weekly_cashflow: analysis.weekly_cashflow,
-      fair_value: analysis.fair_value,
-      post_reno_value: analysis.post_reno_value,
-      purchase_price_target: analysis.purchase_price_target,
-      vacancy_risk: analysis.vacancy_risk,
-      recommendation: analysis.recommendation,
-      recommendation_reason: analysis.recommendation_reason,
-    }, { onConflict: 'property_id' })
+    .select('id')
+    .eq('property_id', propertyId)
+    .single()
 
-  if (upsertError) throw new Error(upsertError.message)
+  const valuationData = {
+    property_id: propertyId,
+    weekly_rent_estimate: analysis.weekly_rent_estimate,
+    gross_yield: analysis.gross_yield,
+    net_yield: analysis.net_yield,
+    weekly_cashflow: analysis.weekly_cashflow,
+    fair_value: analysis.fair_value,
+    post_reno_value: analysis.post_reno_value,
+    purchase_price_target: analysis.purchase_price_target,
+    vacancy_risk: analysis.vacancy_risk,
+    recommendation: analysis.recommendation,
+    recommendation_reason: analysis.recommendation_reason,
+  }
+
+  let saveError
+  if (existing) {
+    const { error } = await supabase.from('valuations').update(valuationData).eq('id', existing.id)
+    saveError = error
+  } else {
+    const { error } = await supabase.from('valuations').insert(valuationData)
+    saveError = error
+  }
+
+  if (saveError) throw new Error(saveError.message)
 
   // Update ai_score on the property
   await supabase
