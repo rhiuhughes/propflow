@@ -75,10 +75,12 @@ export default async function Dashboard() {
                 {properties && properties.length > 0 ? properties.map((p) => {
                   const val = Array.isArray(p.valuations) ? p.valuations[0] : null
                   return (
-                    <tr key={p.id} className="hover:bg-gray-50 transition-colors cursor-pointer" onClick={() => window.location.href = `/property/${p.id}`}>
+                    <tr key={p.id} className="hover:bg-gray-50 transition-colors">
                       <td className="px-6 py-4">
-                        <div className="font-medium text-gray-900">{p.address}</div>
-                        <div className="text-xs text-gray-400">{p.suburb}</div>
+                        <Link href={`/property/${p.id}`} className="block">
+                          <div className="font-medium text-gray-900 hover:text-blue-600">{p.address}</div>
+                          <div className="text-xs text-gray-400">{p.suburb}</div>
+                        </Link>
                       </td>
                       <td className="px-6 py-4 text-gray-600">
                         <span className="text-gray-300 text-xs mr-1">#{p.pipeline_stage}</span>
