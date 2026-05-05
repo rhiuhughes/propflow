@@ -27,7 +27,7 @@ export default async function PropertyPage({ params }: { params: Promise<{ id: s
 
   const { data: p } = await supabase
     .from('properties')
-    .select('*, valuations(*)')
+    .select('*, valuations(*, reno_cost_estimate)')
     .eq('id', id)
     .single()
 
@@ -89,9 +89,37 @@ export default async function PropertyPage({ params }: { params: Promise<{ id: s
           <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
             <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-4">AI Analysis</h2>
 
+            {/* Uplift banner — the key number */}
+            {(() => {
+              const renoCost = val.reno_cost_estimate ?? 27500
+              const netUplift = val.post_reno_value && p.asking_price
+                ? Math.round(val.post_reno_value - p.asking_price - renoCost)
+                : null
+              const grossUplift = val.post_reno_value && p.asking_price
+                ? Math.round(val.post_reno_value - p.asking_price)
+                : null
+              if (!netUplift) return null
+              const colour = netUplift >= 80000 ? 'bg-green-50 border-green-200' : netUplift >= 40000 ? 'bg-yellow-50 border-yellow-200' : 'bg-red-50 border-red-200'
+              const textColour = netUplift >= 80000 ? 'text-green-700' : netUplift >= 40000 ? 'text-yellow-600' : 'text-red-600'
+              return (
+                <div className={`rounded-xl border-2 p-5 mb-6 ${colour}`}>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-1">Renovation Uplift</p>
+                  <p className={`text-4xl font-bold mb-2 ${textColour}`}>
+                    {netUplift >= 0 ? '+' : ''}${netUplift.toLocaleString()} net
+                  </p>
+                  <div className="flex gap-6 text-sm text-gray-500">
+                    <span>Asking <strong className="text-gray-700">${Number(p.asking_price).toLocaleString()}</strong></span>
+                    <span>+ Reno <strong className="text-gray-700">${Number(renoCost).toLocaleString()}</strong></span>
+                    <span>→ Post-reno <strong className="text-gray-700">${Number(val.post_reno_value).toLocaleString()}</strong></span>
+                    <span>Gross gain <strong className="text-gray-700">${grossUplift?.toLocaleString()}</strong></span>
+                  </div>
+                </div>
+              )
+            })()}
+
             <div className="grid grid-cols-2 gap-6 mb-6">
               <div className="bg-gray-50 rounded-lg p-4">
-                <p className="text-xs text-gray-400 mb-1">Fair Value</p>
+                <p className="text-xs text-gray-400 mb-1">Fair Value (unrenovated)</p>
                 <p className="text-2xl font-bold text-gray-900">
                   {val.fair_value ? `$${Number(val.fair_value).toLocaleString()}` : '—'}
                 </p>

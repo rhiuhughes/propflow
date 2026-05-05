@@ -23,7 +23,7 @@ export default async function Dashboard() {
 
   const { data: properties } = await supabase
     .from('properties')
-    .select(`*, valuations(gross_yield, weekly_cashflow, fair_value), offers(status, ai_recommendation)`)
+    .select(`*, valuations(gross_yield, weekly_cashflow, fair_value, post_reno_value, reno_cost_estimate), offers(status, ai_recommendation)`)
     .neq('status', 'dead')
     .order('ai_score', { ascending: false })
 
@@ -66,7 +66,7 @@ export default async function Dashboard() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-gray-50 text-left text-xs text-gray-400 uppercase tracking-wider">
-                  {['Property', 'Stage', 'AI Score', 'Asking Price', 'Fair Value', 'Gross Yield', 'Cashflow/wk', 'Status'].map(h => (
+                  {['Property', 'Stage', 'AI Score', 'Asking Price', 'Post-Reno Value', 'Net Uplift', 'Gross Yield', 'Cashflow/wk', 'Status'].map(h => (
                     <th key={h} className="px-6 py-3 font-medium">{h}</th>
                   ))}
                 </tr>
@@ -74,6 +74,10 @@ export default async function Dashboard() {
               <tbody className="divide-y divide-gray-50">
                 {properties && properties.length > 0 ? properties.map((p) => {
                   const val = Array.isArray(p.valuations) ? p.valuations[0] : null
+                  const renoCost = val?.reno_cost_estimate ?? 27500
+                  const netUplift = val?.post_reno_value && p.asking_price
+                    ? Math.round(val.post_reno_value - p.asking_price - renoCost)
+                    : null
                   return (
                     <tr key={p.id} className="hover:bg-gray-50 transition-colors">
                       <td className="px-6 py-4">
@@ -95,7 +99,14 @@ export default async function Dashboard() {
                         {p.asking_price ? `$${Number(p.asking_price).toLocaleString()}` : <span className="text-gray-200">—</span>}
                       </td>
                       <td className="px-6 py-4 text-gray-700">
-                        {val?.fair_value ? `$${Number(val.fair_value).toLocaleString()}` : <span className="text-gray-200">—</span>}
+                        {val?.post_reno_value ? `$${Number(val.post_reno_value).toLocaleString()}` : <span className="text-gray-200">—</span>}
+                      </td>
+                      <td className="px-6 py-4 font-semibold">
+                        {netUplift != null
+                          ? <span className={netUplift >= 80000 ? 'text-green-600' : netUplift >= 40000 ? 'text-yellow-500' : 'text-red-500'}>
+                              {netUplift >= 0 ? '+' : ''}${netUplift.toLocaleString()}
+                            </span>
+                          : <span className="text-gray-200">—</span>}
                       </td>
                       <td className="px-6 py-4 font-medium">
                         {val?.gross_yield != null
@@ -116,7 +127,7 @@ export default async function Dashboard() {
                   )
                 }) : (
                   <tr>
-                    <td colSpan={8} className="px-6 py-16 text-center text-gray-300 text-sm">
+                    <td colSpan={9} className="px-6 py-16 text-center text-gray-300 text-sm">
                       No properties yet — they'll appear here once scraping is running.
                     </td>
                   </tr>

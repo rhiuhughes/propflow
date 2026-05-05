@@ -63,10 +63,14 @@ No CMA data available — estimate fair_value and post_reno_value from your know
 `}
 NZ investment assumptions:
 - Strategy: buy-renovate-refinance-hold
-- Renovation budget: $20k–$35k
 - Mortgage: 6.5% p.a. on 80% LVR
 - Property management: 8% of gross rent
 - Insurance: $1,500/yr · Rates: $3,000/yr · Maintenance: 1% of purchase price/yr
+
+CRITICAL — renovation uplift is the most important metric for this strategy:
+- post_reno_value: what the property will sell/refinance for after a standard cosmetic renovation. Base this on actual recent sales of renovated homes in ${p.suburb ?? 'this suburb'} — updated kitchens, bathrooms, fresh paint, new carpet. This must reflect real renovated comp prices, not a generic percentage uplift.
+- reno_cost_estimate: your best estimate of the renovation cost for this specific property ($15k–$40k range depending on size and condition).
+- net_uplift = post_reno_value − asking_price − reno_cost_estimate. This is the equity created. Target is $80k+.
 
 Return ONLY valid JSON:
 {
@@ -75,12 +79,13 @@ Return ONLY valid JSON:
   "net_yield": <number, % after all costs>,
   "weekly_cashflow": <number, after all costs incl. mortgage — negative if negatively geared>,
   "fair_value": <number${hasCMA && cma?.fair_value ? ` — must be ${Number(cma.fair_value).toLocaleString()} (from CMA)` : ', estimated NZD'}>,
-  "post_reno_value": <number${hasCMA && cma?.post_reno_value ? ` — must be ${Number(cma.post_reno_value).toLocaleString()} (from CMA)` : ', estimated NZD'}>,
+  "post_reno_value": <number${hasCMA && cma?.post_reno_value ? ` — must be ${Number(cma.post_reno_value).toLocaleString()} (from CMA)` : ', what renovated homes in this suburb actually sell for — must be based on real comp sales'}>,
+  "reno_cost_estimate": <number, estimated renovation cost for this property NZD>,
   "purchase_price_target": <number, max price to hit yield targets NZD>,
   "vacancy_risk": <"low"|"medium"|"high">,
   "recommendation": <"go"|"conditional"|"no-go">,
-  "recommendation_reason": <string, 2-3 sentences>,
-  "ai_score": <number, 1-10>
+  "recommendation_reason": <string, 2-3 sentences — lead with the net uplift figure>,
+  "ai_score": <number, 1-10 — weight net uplift heavily>
 }`
 
   const response = await client.messages.create({
@@ -126,6 +131,7 @@ Return ONLY valid JSON:
     weekly_cashflow: analysis.weekly_cashflow,
     fair_value: analysis.fair_value,
     post_reno_value: analysis.post_reno_value,
+    reno_cost_estimate: analysis.reno_cost_estimate,
     purchase_price_target: analysis.purchase_price_target,
     vacancy_risk: analysis.vacancy_risk,
     recommendation: analysis.recommendation,

@@ -48,7 +48,11 @@ No CMA available — estimate values from suburb knowledge.
 `}
 NZ investment assumptions:
 - Mortgage: 6.5% p.a. on 80% LVR · PM fee: 8% · Insurance: $1,500/yr · Rates: $3,000/yr · Maintenance: 1%/yr
-- Reno budget: $20k–$35k
+
+CRITICAL — renovation uplift is the most important metric:
+- post_reno_value: what renovated homes in this suburb actually sell for after a cosmetic renovation (new kitchen/bathroom/paint/carpet). Must be based on real renovated comp sales in the suburb, not a % formula.
+- reno_cost_estimate: realistic cost to renovate this specific property ($15k–$40k depending on size/condition/age).
+- net_uplift = post_reno_value − asking_price − reno_cost_estimate. Target $80k+. Weight this heavily in ai_score.
 
 Return ONLY valid JSON (no markdown):
 {
@@ -57,12 +61,13 @@ Return ONLY valid JSON (no markdown):
   "net_yield": <number, %>,
   "weekly_cashflow": <number, negative if negatively geared>,
   "fair_value": <number${hasCMA && cma.fair_value ? `, must be ${Number(cma.fair_value)}` : ''}>,
-  "post_reno_value": <number${hasCMA && cma.post_reno_value ? `, must be ${Number(cma.post_reno_value)}` : ''}>,
+  "post_reno_value": <number${hasCMA && cma.post_reno_value ? `, must be ${Number(cma.post_reno_value)}` : ', what renovated homes in this suburb actually sell for'}>,
+  "reno_cost_estimate": <number, estimated reno cost for this property>,
   "purchase_price_target": <number>,
   "vacancy_risk": <"low"|"medium"|"high">,
   "recommendation": <"go"|"conditional"|"no-go">,
-  "recommendation_reason": <string, 1-2 sentences>,
-  "ai_score": <number, 1-10>
+  "recommendation_reason": <string, 1-2 sentences — lead with net uplift figure>,
+  "ai_score": <number, 1-10 — weight net uplift heavily>
 }`
 }
 
@@ -92,16 +97,17 @@ async function saveResults(propertyId, analysis) {
 
   // Upsert valuation row
   const valuationData = {
-    property_id:          propertyId,
-    weekly_rent_estimate: analysis.weekly_rent_estimate,
-    gross_yield:          analysis.gross_yield,
-    net_yield:            analysis.net_yield,
-    weekly_cashflow:      analysis.weekly_cashflow,
-    fair_value:           analysis.fair_value,
-    post_reno_value:      analysis.post_reno_value,
+    property_id:           propertyId,
+    weekly_rent_estimate:  analysis.weekly_rent_estimate,
+    gross_yield:           analysis.gross_yield,
+    net_yield:             analysis.net_yield,
+    weekly_cashflow:       analysis.weekly_cashflow,
+    fair_value:            analysis.fair_value,
+    post_reno_value:       analysis.post_reno_value,
+    reno_cost_estimate:    analysis.reno_cost_estimate,
     purchase_price_target: analysis.purchase_price_target,
-    vacancy_risk:         analysis.vacancy_risk,
-    recommendation:       analysis.recommendation,
+    vacancy_risk:          analysis.vacancy_risk,
+    recommendation:        analysis.recommendation,
     recommendation_reason: analysis.recommendation_reason,
   }
 
