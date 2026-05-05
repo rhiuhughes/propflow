@@ -28,7 +28,7 @@ const CALL_DELAY   = 800   // ms between API calls (stay within rate limits)
 
 // ─── Prompt builder ───────────────────────────────────────────────────────────
 
-function buildPrompt(p, cma) {
+function buildPrompt(p, cma, rentBenchmark) {
   const hasCMA = cma?.fair_value || cma?.post_reno_value
 
   return `Score this NZ investment property for a buy-renovate-refinance-hold strategy.
@@ -44,10 +44,31 @@ CMA from REINZ comparable sales (real data — use exactly, do not estimate):
 - Fair market value: ${cma.fair_value ? `$${Number(cma.fair_value).toLocaleString()}` : 'n/a'}
 - Post-renovation value: ${cma.post_reno_value ? `$${Number(cma.post_reno_value).toLocaleString()}` : 'n/a'}
 ` : `
+No CMA — estimate fair_value and post_reno_value from suburb knowledge.
+`}${rentBenchmark ? `
+Rental market data from Tenancy Services NZ (${rentBenchmark.period}, real bond data):
+- ${rentBenchmark.region_name} median weekly rent (all properties): $${rentBenchmark.median_rent}/wk
+- Upper quartile: $${rentBenchmark.upper_quartile}/wk · Lower quartile: $${rentBenchmark.lower_quartile}/wk
+- For a ${p.bedrooms ?? 3}-bedroom house: 3br ≈ median × 1.25, 4br ≈ median × 1.40
+- Anchor weekly_rent_estimate to this data.
+` : `
 No CMA available — estimate values from suburb knowledge.
 `}
-NZ investment assumptions:
-- Mortgage: 6.5% p.a. on 80% LVR · PM fee: 8% · Insurance: $1,500/yr · Rates: $3,000/yr · Maintenance: 1%/yr
+NZ investment assumptions — use these exact formulas:
+
+CASHFLOW (post-refinance mortgage — BRRR strategy holds on refinanced value):
+  weekly_mortgage    = (post_reno_value × 0.80 × 0.065) / 52
+  weekly_pm_fee      = weekly_rent_estimate × 0.08
+  weekly_insurance   = 1500 / 52
+  weekly_rates       = 3000 / 52
+  weekly_maintenance = (post_reno_value × 0.01) / 52
+  weekly_cashflow    = weekly_rent_estimate − weekly_mortgage − weekly_pm_fee − weekly_insurance − weekly_rates − weekly_maintenance
+
+YIELD:
+  gross_yield = (weekly_rent_estimate × 52) / asking_price × 100
+  net_yield   = ((weekly_rent_estimate − weekly_mortgage − weekly_pm_fee − weekly_insurance − weekly_rates − weekly_maintenance) × 52) / asking_price × 100
+
+The mortgage uses post_reno_value × 80%, not asking_price × 80%. After refinance the investor holds a larger loan but has pulled equity out for the next deal.
 
 CRITICAL — renovation uplift is the most important metric:
 - post_reno_value: what renovated homes in this suburb actually sell for after a cosmetic renovation (new kitchen/bathroom/paint/carpet). Must be based on real renovated comp sales in the suburb, not a % formula.
@@ -156,20 +177,33 @@ async function main() {
     (valuations ?? []).map(v => [v.property_id, v])
   )
 
+  // Fetch all rental benchmarks once — looked up per-property by region slug
+  const { data: allBenchmarks } = await supabase
+    .from('rental_benchmarks')
+    .select('region_slug, region_name, median_rent, upper_quartile, lower_quartile, period')
+
+  const benchmarkBySlug = Object.fromEntries(
+    (allBenchmarks ?? []).map(b => [b.region_slug, b])
+  )
+
   let scored = 0, failed = 0
 
   for (const property of properties) {
     const cma = cmaByPropertyId[property.id] ?? null
     const hasCMA = cma?.fair_value || cma?.post_reno_value
 
-    process.stdout.write(`  ${property.address}, ${property.suburb ?? ''}${hasCMA ? ' [CMA]' : ''} ... `)
+    // Match rental benchmark by first word of city (e.g. "Auckland" → "auckland")
+    const citySlug = (property.city ?? '').toLowerCase().split(' ')[0]
+    const rentBenchmark = Object.values(benchmarkBySlug).find(b => b.region_slug.includes(citySlug)) ?? null
+
+    process.stdout.write(`  ${property.address}, ${property.suburb ?? ''}${hasCMA ? ' [CMA]' : ''}${rentBenchmark ? ' [rent]' : ''} ... `)
 
     try {
       const response = await anthropic.messages.create({
         model: 'claude-haiku-4-5',
         max_tokens: 512,
         system: 'You are a precise NZ property investment analyst. Respond with valid JSON only — no markdown, no explanation.',
-        messages: [{ role: 'user', content: buildPrompt(property, cma) }],
+        messages: [{ role: 'user', content: buildPrompt(property, cma, rentBenchmark) }],
       })
 
       const text = response.content.find(b => b.type === 'text')?.text ?? ''

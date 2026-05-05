@@ -1,0 +1,25 @@
+name: Fetch Rental Benchmarks
+
+on:
+  schedule:
+    # Every Monday 8am NZST — rents update monthly, weekly fetch is plenty
+    - cron: '0 20 * * 0'
+  workflow_dispatch:
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - name: Fetch rental data
+        run: node scripts/fetch-rental-data.mjs
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}

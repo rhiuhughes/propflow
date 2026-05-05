@@ -42,6 +42,12 @@ export async function runAIAnalysis(formData: FormData) {
 
   if (fetchError || !p) throw new Error('Property not found')
 
+  // Look up regional rental benchmark (match on first word of city e.g. "Auckland" → "auckland")
+  const citySlug = (p.city ?? '').toLowerCase().split(' ')[0]
+  const { data: rentBenchmark } = citySlug
+    ? await supabase.from('rental_benchmarks').select('region_name, median_rent, upper_quartile, lower_quartile, period').ilike('region_slug', `%${citySlug}%`).maybeSingle()
+    : { data: null }
+
   const hasCMA = cma?.fair_value || cma?.post_reno_value
 
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
@@ -60,12 +66,28 @@ CMA data from REINZ comparable sales (real data — use these exact figures, do 
 - Post-renovation value: ${cma?.post_reno_value ? `$${Number(cma.post_reno_value).toLocaleString()}` : 'not available'}
 ` : `
 No CMA data available — estimate fair_value and post_reno_value from your knowledge of this suburb.
-`}
-NZ investment assumptions:
-- Strategy: buy-renovate-refinance-hold
-- Mortgage: 6.5% p.a. on 80% LVR
-- Property management: 8% of gross rent
-- Insurance: $1,500/yr · Rates: $3,000/yr · Maintenance: 1% of purchase price/yr
+`}${rentBenchmark ? `
+Rental market data from Tenancy Services NZ (${rentBenchmark.period}, real bond data):
+- ${rentBenchmark.region_name} median weekly rent (all properties): $${rentBenchmark.median_rent}/wk
+- Upper quartile: $${rentBenchmark.upper_quartile}/wk · Lower quartile: $${rentBenchmark.lower_quartile}/wk
+- For a ${p.bedrooms ?? 3}-bedroom house, adjust upward: 3br ≈ median × 1.25, 4br ≈ median × 1.40
+- Use this as your anchor for weekly_rent_estimate — do not guess independently of this data.
+` : ''}
+NZ investment assumptions — use these exact formulas, do not deviate:
+
+CASHFLOW (post-refinance mortgage — this is BRRR, the holding mortgage is on the refinanced value):
+  weekly_mortgage   = (post_reno_value × 0.80 × 0.065) / 52
+  weekly_pm_fee     = weekly_rent_estimate × 0.08
+  weekly_insurance  = 1500 / 52
+  weekly_rates      = 3000 / 52
+  weekly_maintenance = (post_reno_value × 0.01) / 52
+  weekly_cashflow   = weekly_rent_estimate − weekly_mortgage − weekly_pm_fee − weekly_insurance − weekly_rates − weekly_maintenance
+
+YIELD:
+  gross_yield = (weekly_rent_estimate × 52) / asking_price × 100
+  net_yield   = ((weekly_rent_estimate × 52) − (weekly_mortgage + weekly_pm_fee + weekly_insurance + weekly_rates + weekly_maintenance) × 52) / asking_price × 100
+
+Note: gross_yield is on purchase price. Cashflow uses the REFINANCED mortgage (post_reno_value × 80%), not the purchase mortgage. This is intentional — after refinance the investor holds a larger loan but has pulled equity out for the next deal.
 
 CRITICAL — renovation uplift is the most important metric for this strategy:
 - post_reno_value: what the property will sell/refinance for after a standard cosmetic renovation. Base this on actual recent sales of renovated homes in ${p.suburb ?? 'this suburb'} — updated kitchens, bathrooms, fresh paint, new carpet. This must reflect real renovated comp prices, not a generic percentage uplift.

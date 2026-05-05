@@ -23,9 +23,14 @@ export default async function Dashboard() {
             <h1 className="text-3xl font-bold text-gray-900">PropFlow</h1>
             <p className="text-gray-400 text-sm mt-1">Property Investment Pipeline</p>
           </div>
-          <Link href="/add" className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors">
-            + Add Property
-          </Link>
+          <div className="flex gap-3">
+            <Link href="/calculator" className="bg-white hover:bg-gray-50 border border-gray-200 text-gray-700 text-sm font-medium px-4 py-2 rounded-lg transition-colors">
+              ⚡ Calculator
+            </Link>
+            <Link href="/add" className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors">
+              + Add Property
+            </Link>
+          </div>
         </div>
 
         <div className="grid grid-cols-3 gap-4">
