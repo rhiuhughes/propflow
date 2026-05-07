@@ -18,16 +18,17 @@ export default function Calculator() {
   const [mortgageRate,  setMortgageRate]  = useState('6.5')
 
   const results = useMemo(() => {
-    const price   = Number(purchasePrice)
-    const rent    = Number(weeklyRent)
-    const reno    = Number(renoCost)
-    const rate    = Number(mortgageRate) / 100
+    const price    = Number(purchasePrice)
+    const rent     = Number(weeklyRent)
+    const reno     = Number(renoCost)
+    const rate     = Number(mortgageRate) / 100
     const postReno = Number(postRenoValue) || null
 
     if (!price || !rent) return null
 
-    // Refinance mortgage (what you hold on after BRRR)
-    const holdingLoan     = (postReno ?? price) * 0.80
+    // Holding mortgage is always 70% of purchase price (investor LVR max)
+    // Renovation cost is treated as capital, not added to the loan
+    const holdingLoan     = price * 0.70
     const weeklyMortgage  = (holdingLoan * rate) / 52
     const weeklyPM        = rent * 0.08
     const weeklyInsurance = 1500 / 52
@@ -40,18 +41,18 @@ export default function Calculator() {
     const netYield        = (weeklyCashflow * 52) / price * 100
 
     // Uplift (only if post-reno value provided)
-    const netUplift       = postReno ? postReno - price - reno : null
-    const grossUplift     = postReno ? postReno - price : null
-    const purchaseMortgage = price * 0.80
-    const equityReleased  = postReno ? holdingLoan - purchaseMortgage - reno : null
-    const deposit         = price * 0.20
-    const cashInDeal      = deposit + reno
-    const roeCash         = netUplift != null ? (netUplift / cashInDeal) * 100 : null
+    const netUplift        = postReno ? postReno - price - reno : null
+    const grossUplift      = postReno ? postReno - price : null
+    const purchaseMortgage = price * 0.70
+    const equityReleased   = postReno ? (postReno * 0.70) - purchaseMortgage - reno : null
+    const deposit          = price * 0.30
+    const cashInDeal       = deposit + reno
+    const roeCash          = netUplift != null ? (netUplift / cashInDeal) * 100 : null
 
     // Capital recycled verdict
-    const totalInvested      = deposit + reno * 1.15
-    const capitalRecovered   = (equityReleased ?? 0) >= totalInvested
-    const moneyLeftIn        = Math.max(0, totalInvested - (equityReleased ?? 0))
+    const totalInvested    = deposit + reno * 1.15
+    const capitalRecovered = (equityReleased ?? 0) >= totalInvested
+    const moneyLeftIn      = Math.max(0, totalInvested - (equityReleased ?? 0))
 
     return {
       weeklyCashflow, grossYield, netYield,
@@ -189,7 +190,7 @@ export default function Calculator() {
               </div>
               <div className="bg-gray-50 rounded-lg p-3 space-y-1.5 text-xs text-gray-500">
                 <div className="flex justify-between">
-                  <span>Holding mortgage ({postRenoValue ? 'post-reno' : 'purchase'} × 80% @ {mortgageRate}%)</span>
+                  <span>Holding mortgage (purchase × 70% @ {mortgageRate}%)</span>
                   <span className="font-medium text-gray-700">{fmt(results.weeklyMortgage)}/wk · {fmt(results.holdingLoan)} total</span>
                 </div>
                 <div className="flex justify-between">
@@ -228,7 +229,7 @@ export default function Calculator() {
                   </div>
                   <div className="bg-gray-50 rounded-lg p-3 space-y-1.5 text-xs text-gray-500">
                     <div className="flex justify-between">
-                      <span>Deposit (20%)</span>
+                      <span>Deposit (30%)</span>
                       <span className="font-medium text-gray-700">{fmt(results.deposit)}</span>
                     </div>
                     <div className="flex justify-between">
