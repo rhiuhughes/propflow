@@ -48,12 +48,18 @@ export default function Calculator() {
     const cashInDeal      = deposit + reno
     const roeCash         = netUplift != null ? (netUplift / cashInDeal) * 100 : null
 
+    // Capital recycled verdict
+    const totalInvested      = deposit + reno * 1.15
+    const capitalRecovered   = (equityReleased ?? 0) >= totalInvested
+    const moneyLeftIn        = Math.max(0, totalInvested - (equityReleased ?? 0))
+
     return {
       weeklyCashflow, grossYield, netYield,
       weeklyMortgage, weeklyTotalCost,
       holdingLoan, purchaseMortgage,
       netUplift, grossUplift, equityReleased,
       deposit, cashInDeal, roeCash,
+      totalInvested, capitalRecovered, moneyLeftIn,
     }
   }, [purchasePrice, weeklyRent, postRenoValue, renoCost, mortgageRate])
 
@@ -201,56 +207,76 @@ export default function Calculator() {
 
             {/* Uplift */}
             {results.netUplift != null && (
-              <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-6">
-                <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-4">BRRR Equity</h2>
-                <div className="grid grid-cols-2 gap-4 mb-4">
-                  <div>
-                    <p className="text-xs text-gray-400 mb-1">Net Uplift</p>
-                    <p className={`text-3xl font-bold ${upliftColour}`}>
-                      {results.netUplift >= 0 ? '+' : ''}{fmt(results.netUplift)}
-                    </p>
-                    <p className="text-xs text-gray-400 mt-0.5">post-reno − purchase − reno cost</p>
+              <div className="space-y-4">
+                <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-6">
+                  <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-4">BRRR Equity</h2>
+                  <div className="grid grid-cols-2 gap-4 mb-4">
+                    <div>
+                      <p className="text-xs text-gray-400 mb-1">Net Uplift</p>
+                      <p className={`text-3xl font-bold ${upliftColour}`}>
+                        {results.netUplift >= 0 ? '+' : ''}{fmt(results.netUplift)}
+                      </p>
+                      <p className="text-xs text-gray-400 mt-0.5">post-reno − purchase − reno cost</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-400 mb-1">Equity Released</p>
+                      <p className={`text-3xl font-bold ${(results.equityReleased ?? 0) >= 0 ? 'text-green-600' : 'text-red-500'}`}>
+                        {(results.equityReleased ?? 0) >= 0 ? '+' : ''}{fmt(results.equityReleased ?? 0)}
+                      </p>
+                      <p className="text-xs text-gray-400 mt-0.5">cash freed for next deal</p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-xs text-gray-400 mb-1">Equity Released</p>
-                    <p className={`text-3xl font-bold ${(results.equityReleased ?? 0) >= 0 ? 'text-green-600' : 'text-red-500'}`}>
-                      {(results.equityReleased ?? 0) >= 0 ? '+' : ''}{fmt(results.equityReleased ?? 0)}
-                    </p>
-                    <p className="text-xs text-gray-400 mt-0.5">cash freed for next deal</p>
+                  <div className="bg-gray-50 rounded-lg p-3 space-y-1.5 text-xs text-gray-500">
+                    <div className="flex justify-between">
+                      <span>Deposit (20%)</span>
+                      <span className="font-medium text-gray-700">{fmt(results.deposit)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Reno cost</span>
+                      <span className="font-medium text-gray-700">{fmt(Number(renoCost))}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Contingency buffer (15%)</span>
+                      <span className="font-medium text-gray-700">{fmt(Number(renoCost) * 0.15)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Total reno incl. contingency</span>
+                      <span className="font-medium text-gray-700">{fmt(Number(renoCost) * 1.15)}</span>
+                    </div>
+                    <div className="flex justify-between border-t border-gray-200 pt-1.5">
+                      <span>Total cash in deal</span>
+                      <span className="font-medium text-gray-700">{fmt(results.cashInDeal)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Gross uplift</span>
+                      <span className="font-medium text-gray-700">{fmt(results.grossUplift ?? 0)}</span>
+                    </div>
+                    <div className="flex justify-between border-t border-gray-200 pt-1.5">
+                      <span className="font-semibold text-gray-600">Return on cash deployed</span>
+                      <span className={`font-bold ${(results.roeCash ?? 0) >= 50 ? 'text-green-600' : (results.roeCash ?? 0) >= 25 ? 'text-yellow-500' : 'text-red-500'}`}>
+                        {results.roeCash?.toFixed(0)}%
+                      </span>
+                    </div>
                   </div>
                 </div>
-                <div className="bg-gray-50 rounded-lg p-3 space-y-1.5 text-xs text-gray-500">
-                  <div className="flex justify-between">
-                    <span>Deposit (20%)</span>
-                    <span className="font-medium text-gray-700">{fmt(results.deposit)}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Reno cost</span>
-                    <span className="font-medium text-gray-700">{fmt(Number(renoCost))}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Contingency buffer (15%)</span>
-                    <span className="font-medium text-gray-700">{fmt(Number(renoCost) * 0.15)}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Total reno incl. contingency</span>
-                    <span className="font-medium text-gray-700">{fmt(Number(renoCost) * 1.15)}</span>
-                  </div>
-                  <div className="flex justify-between border-t border-gray-200 pt-1.5">
-                    <span>Total cash in deal</span>
-                    <span className="font-medium text-gray-700">{fmt(results.cashInDeal)}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Gross uplift</span>
-                    <span className="font-medium text-gray-700">{fmt(results.grossUplift ?? 0)}</span>
-                  </div>
-                  <div className="flex justify-between border-t border-gray-200 pt-1.5">
-                    <span className="font-semibold text-gray-600">Return on cash deployed</span>
-                    <span className={`font-bold ${(results.roeCash ?? 0) >= 50 ? 'text-green-600' : (results.roeCash ?? 0) >= 25 ? 'text-yellow-500' : 'text-red-500'}`}>
-                      {results.roeCash?.toFixed(0)}%
-                    </span>
-                  </div>
+
+                {/* Capital recycled verdict banner */}
+                <div className={`rounded-xl border p-4 ${results.capitalRecovered ? 'bg-green-50 border-green-200' : 'bg-amber-50 border-amber-200'}`}>
+                  <span className={`text-xs font-semibold px-2 py-0.5 rounded ${results.capitalRecovered ? 'bg-green-600 text-white' : 'bg-amber-500 text-white'}`}>
+                    {results.capitalRecovered ? 'CAPITAL RECYCLED' : 'CAPITAL PARTIALLY TIED UP'}
+                  </span>
+                  <p className="text-sm font-semibold text-gray-800 mt-2">
+                    {results.capitalRecovered
+                      ? 'Full BRRR — you pulled your capital out.'
+                      : `${fmt(results.moneyLeftIn)} still in the deal after refinancing.`}
+                  </p>
+                  <p className="text-xs text-gray-500 mt-1">
+                    {results.capitalRecovered
+                      ? 'The refinance recovered your full investment. Redeploy into your next deal.'
+                      : 'Consider whether the equity position and cashflow justify leaving it there.'}
+                  </p>
                 </div>
+
               </div>
             )}
 
