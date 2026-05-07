@@ -228,6 +228,14 @@ export default function Calculator() {
                     <span>Reno cost</span>
                     <span className="font-medium text-gray-700">{fmt(Number(renoCost))}</span>
                   </div>
+                  <div className="flex justify-between">
+                    <span>Contingency buffer (15%)</span>
+                    <span className="font-medium text-gray-700">{fmt(Number(renoCost) * 0.15)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Total reno incl. contingency</span>
+                    <span className="font-medium text-gray-700">{fmt(Number(renoCost) * 1.15)}</span>
+                  </div>
                   <div className="flex justify-between border-t border-gray-200 pt-1.5">
                     <span>Total cash in deal</span>
                     <span className="font-medium text-gray-700">{fmt(results.cashInDeal)}</span>
